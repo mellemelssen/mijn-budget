@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Instellingen</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f13; --surface: #17171e; --surface2: #1e1e28;
+  --border: rgba(255,255,255,0.07); --text: #f0f0f5; --text2: #9090a8;
+  --text3: #5a5a72; --accent: #6c63ff; --green: #3dd68c; --red: #ff5c7a;
+  --radius: 14px; --radius-sm: 8px;
+}
+body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 28px 32px; font-size: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 14px; }
+.card-title { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+.page-title { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+.page-sub { color: var(--text2); font-size: 13px; margin-bottom: 24px; }
+label { display: block; font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); padding: 10px 12px; font-size: 14px; font-family: inherit; outline: none; margin-bottom: 14px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: none; font-family: inherit; margin-right: 8px; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-ghost { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+.status-bar { display: flex; align-items: center; gap: 10px; padding: 12px; background: var(--surface2); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); padding: 12px 18px; font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+.toast.show { opacity: 1; }
+.toast.success { color: var(--green); }
+.toast.error { color: var(--red); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div class="page-title">Instellingen</div>
+<div class="page-sub">Supabase koppeling voor sync tussen apparaten</div>
+
+<div class="card">
+  <div class="card-title">Verbindingsstatus</div>
+  <div class="status-bar">
+    <div id="status-dot" style="width:10px;height:10px;border-radius:50%;background:#5a5a72;flex-shrink:0"></div>
+    <span id="status-text" style="font-size:13px;color:#9090a8">Nog niet gekoppeld</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Supabase koppeling</div>
+  <p style="font-size:13px;color:#9090a8;margin-bottom:14px;line-height:1.6">
+    Vul je gegevens in van <strong style="color:#f0f0f5">supabase.com → project → Project Settings → API Keys → Legacy tab</strong>
+  </p>
+  <label>Project URL</label>
+  <input id="sb-url" type="text" placeholder="https://xyzxyz.supabase.co">
+  <label>Anon Key</label>
+  <input id="sb-key" type="password" placeholder="eyJhbGci...">
+  <button class="btn btn-primary" onclick="saveConfig()">Opslaan en testen</button>
+  <button class="btn btn-ghost" onclick="clearConfig()">Verwijderen</button>
+</div>
+
+<div class="card">
+  <div class="card-title">Synchronisatie</div>
+  <button class="btn btn-ghost" onclick="pushData()">&#8593; Upload naar cloud</button>
+  <button class="btn btn-ghost" onclick="pullData()">&#8595; Download van cloud</button>
+  <p style="font-size:12px;color:#5a5a72;margin-top:10px">Eerste keer op laptop: Upload. Op ander apparaat: Download.</p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let client = null;
+
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type + ' show';
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function setStatus(ok, msg) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.style.background = ok ? '#3dd68c' : '#ff5c7a';
+  txt.textContent = msg;
+  txt.style.color = ok ? '#3dd68c' : '#ff5c7a';
+}
+
+async function saveConfig() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) { toast('Vul beide velden in', 'error'); return; }
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  try {
+    client = supabase.createClient(url, key);
+    const { error } = await client.from('budget_data').select('key').limit(1);
+    if (error && error.code !== '42P01') throw error;
+    setStatus(true, 'Verbonden en klaar ✓');
+    toast('Koppeling werkt!', 'success');
+  } catch(e) {
+    setStatus(false, 'Mislukt: ' + e.message);
+    toast('Verbinding mislukt', 'error');
+  }
+}
+
+function clearConfig() {
+  localStorage.removeItem('sb_url');
+  localStorage.removeItem('sb_key');
+  client = null;
+  document.getElementById('sb-url').value = '';
+  document.getElementById('sb-key').value = '';
+  setStatus(false, 'Koppeling verwijderd');
+  toast('Verwijderd', 'success');
+}
+
+async function pushData() {
+  if (!client) { toast('Eerst verbinding instellen', 'error'); return; }
+  try {
+    const keys = ['transactions','budgets','goals','recurring','crypto_txs'];
+    for (const k of keys) {
+      const lsKey = k === 'crypto_txs' ? 'mb_crypto_txs' : 'mb_' + k;
+      const val = localStorage.getItem(lsKey) || (k === 'budgets' ? '{}' : '[]');
+      await client.from('budget_data').upsert({ key: k, value: val }, { onConflict: 'key' });
+    }
+    toast('Geupload ✓', 'success');
+  } catch(e) { toast('Mislukt: ' + e.message, 'error'); }
+}
+
+async function pullData() {
+  if (!client) { toast('Eerst verbinding instellen', 'error'); return; }
+  try {
+    const { data: rows, error } = await client.from('budget_data').select('*');
+    if (error) throw error;
+    rows.forEach(r => {
+      const lsKey = r.key === 'crypto_txs' ? 'mb_crypto_txs' : 'mb_' + r.key;
+      localStorage.setItem(lsKey, r.value);
+    });
+    toast('Gedownload ✓ — herlaad de budget app', 'success');
+  } catch(e) { toast('Mislukt: ' + e.message, 'error'); }
+}
+
+// Load saved config
+window.addEventListener('load', () => {
+  const url = localStorage.getItem('sb_url') || '';
+  const key = localStorage.getItem('sb_key') || '';
+  document.getElementById('sb-url').value = url;
+  document.getElementById('sb-key').value = key;
+  if (url && key) {
+    try {
+      client = supabase.createClient(url, key);
+      setStatus(true, 'Verbonden ✓');
+    } catch(e) {}
+  }
+});
+</script>
+</body>
+</html>
